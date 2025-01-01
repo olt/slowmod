@@ -60,8 +60,9 @@ public:
     phase2 = 2 << 29;
     phase3 = (2 << 30) + (2 << 29);
     phase4 = 2 << 30;
+    phase5 = 0;
   }
-  uint32_t phase1, phase2, phase3, phase4;
+  uint32_t phase1, phase2, phase3, phase4, phase5;
   SlowMod() {
     for (int i = 0; i < npts; i++) {
       // just shy of 2^22 * sin
@@ -86,11 +87,10 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
+    LedBrightness(0, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
     if (Connected(Input::Audio1)) {
-      LedOn(0, true);
       AudioOut1((val * AudioIn1()) >> 12);
     } else {
-      LedOn(0, false);
       AudioOut1(val);
     }
   }
@@ -100,11 +100,10 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
+    LedBrightness(1, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
     if (Connected(Input::Audio2)) {
-      LedOn(1, true);
       AudioOut2((val * AudioIn2()) >> 12);
     } else {
-      LedOn(1, false);
       AudioOut2(val);
     }
   }
@@ -114,11 +113,10 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = 2048 - int32_t(truncated_cv_val >> 8);
+    LedBrightness(2, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
     if (Connected(Input::CV1)) {
-      LedOn(2, true);
       CVOut1((val * CVIn1()) >> 12);
     } else {
-      LedOn(2, false);
       CVOut1(val);
     }
   }
@@ -127,33 +125,70 @@ public:
     cv_val += 524288;
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
-    int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
+    int16_t val = 2048 - int32_t(truncated_cv_val >> 8);
+    LedBrightness(3, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
     if (Connected(Input::CV2)) {
-      LedOn(3, true);
       CVOut2((val * CVIn2()) >> 12);
     } else {
-      LedOn(3, false);
       CVOut2(val);
     }
   }
   virtual void __not_in_flash_func(ProcessSample)() {
-    int32_t omega = ExpVoct(KnobVal(Knob::Main)) >> 12;
-    int32_t diff;
-    diff = (SwitchVal() == Switch::Middle) ? 31 : 1493;
-    if (SwitchVal() == Switch::Down) { reset(); }
+    bool pause = false;
+    if (SwitchVal() == Switch::Down || PulseIn1()) {
+      pause = true;
+    }
 
-    //if (diff>omega) diff=omega;
-    phase1 += omega;
-    phase2 += (omega >> 1) + diff;
-    phase3 += (omega >> 2) + (diff * 3) + (diff >> 2);
-    phase4 += (omega >> 3) + (diff * 4) + (diff >> 3);
+    bool self_mod = false;
 
-    if (PulseIn1RisingEdge()) { reset(); }
+    if ((SwitchVal() == Switch::Up) != PulseIn2()) {
+      self_mod = true;
+    }
+
+    int32_t mod = ((sinval(phase5 >> 11) >> 3) >> 8); // 0-4095
+    mod += ((sinval(phase2 >> 11) >> 3) >> 10);
+    int32_t omega = ExpVoct(KnobVal(Knob::Main) + (self_mod ? (mod>>2) : 0)) >> 11;
+
+    int32_t diff = 53 + (mod >> 4);
+    if (diff > omega) { diff = omega; }
+
+    if (!pause) {
+      phase1 += omega;
+      phase2 += (omega >> 1) + diff;
+      phase3 += (omega >> 2) + (diff * 3) + (diff >> 2);
+      phase4 += (omega >> 3) + (diff * 4) + (diff >> 3);
+      phase5 += (omega >> 2); // + (diff * 2) + (diff >> 2);
+    }
 
     SetAudio1(sinval(phase1 >> 11) >> 3);
     SetAudio2(sinval(phase2 >> 11) >> 3);
     SetCV1(sinval(phase3 >> 11) >> 3);
     SetCV2(sinval(phase4 >> 11) >> 3);
+
+    bool pulse1 = (
+      ((sinval(phase1 >> 11) >> 8) & 0x0a00) > 
+      ((sinval(phase2 >> 11) >> 8) & 0x0a00)
+    );
+    bool pulse2 = (
+      ((sinval(phase3 >> 11) >> 8) & 0x0a00) > 
+      ((sinval(phase4 >> 11) >> 8) & 0x0a00)
+    );
+    PulseOut1(pulse1);
+    PulseOut2(pulse2);
+    LedOn(4, pulse1);
+    LedOn(5, pulse2);
+    // SetCV2(mod << 8);
+    // debugVal(mod, -2000, -1000, -500, 500, 1000, 2000);
+  }
+
+  void debugVal(int32_t val, int32_t t0, int32_t t1, int32_t t2, int32_t t3, int32_t t4, int32_t t5) {
+    LedOn(0, val > t0);
+    LedOn(1, val > t1);
+    LedOn(2, val > t2);
+    LedOn(3, val > t3);
+    LedOn(4, val > t4);
+    LedOn(5, val > t5);
+
   }
 };
 
