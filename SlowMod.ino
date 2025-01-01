@@ -54,6 +54,11 @@ public:
   static constexpr int npts = 8192;
   int32_t sinevals[npts];
 
+
+  bool switch_is_down = false;
+  int mod_depth = 0;
+
+
   void reset() {
     // start LFOs at different phases
     phase1 = 0;
@@ -87,7 +92,9 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
-    LedBrightness(0, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
+    if (!switch_is_down) {
+      LedBrightness(0, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
+    }
     if (Connected(Input::Audio1)) {
       AudioOut1((val * AudioIn1()) >> 12);
     } else {
@@ -100,7 +107,9 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
-    LedBrightness(1, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
+    if (!switch_is_down) {
+      LedBrightness(1, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
+    }
     if (Connected(Input::Audio2)) {
       AudioOut2((val * AudioIn2()) >> 12);
     } else {
@@ -113,7 +122,9 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = 2048 - int32_t(truncated_cv_val >> 8);
-    LedBrightness(2, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
+    if (!switch_is_down) {
+      LedBrightness(2, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
+    }
     if (Connected(Input::CV1)) {
       CVOut1((val * CVIn1()) >> 12);
     } else {
@@ -126,7 +137,9 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = 2048 - int32_t(truncated_cv_val >> 8);
-    LedBrightness(3, 4095 - (int32_t(truncated_cv_val >> 8)*int32_t(truncated_cv_val >> 8)) / 4096); 
+    if (!switch_is_down) {
+      LedBrightness(3, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
+    }
     if (Connected(Input::CV2)) {
       CVOut2((val * CVIn2()) >> 12);
     } else {
@@ -135,29 +148,38 @@ public:
   }
   virtual void __not_in_flash_func(ProcessSample)() {
     bool pause = false;
-    if (SwitchVal() == Switch::Down || PulseIn1()) {
+    if (SwitchVal() == Switch::Up) {
       pause = true;
     }
 
-    bool self_mod = false;
-
-    if ((SwitchVal() == Switch::Up) != PulseIn2()) {
-      self_mod = true;
+    if (SwitchVal() == Switch::Down) {
+      if (!switch_is_down) {
+        mod_depth = (mod_depth + 1) % 4;
+      }
+      switch_is_down = true;
+      for (int i = 0; i < 6; i++) {
+        LedOn(i, i <= mod_depth);
+      }
+    } else {
+      switch_is_down = false;
     }
 
-    int32_t mod = ((sinval(phase5 >> 11) >> 3) >> 8); // 0-4095
-    mod += ((sinval(phase2 >> 11) >> 3) >> 10);
-    int32_t omega = ExpVoct(KnobVal(Knob::Main) + (self_mod ? (mod>>2) : 0)) >> 11;
+    int32_t mod = ((sinval(phase5 >> 11) >> 3) >> 8);  // 0-4095
+    mod += ((sinval(phase2 >> 11) >> 3) >> 10);        // + 0-1023
+    mod += ((sinval(phase1 >> 11) >> 3) >> 12);        // + 0-255
+    mod = mod >> (5 - mod_depth);                      // 0-5373 shifted by 1-5 -> max. 2686-167
 
-    int32_t diff = 53 + (mod >> 4);
-    if (diff > omega) { diff = omega; }
+    int32_t omega = ExpVoct(KnobVal(Knob::Main) + mod) >> 11;
+
+    int32_t diff = 12 + (7 << (mod_depth + 1));
+    // if (diff > omega) { diff = omega; }
 
     if (!pause) {
-      phase1 += omega;
-      phase2 += (omega >> 1) + diff;
-      phase3 += (omega >> 2) + (diff * 3) + (diff >> 2);
+      phase1 += omega * (1 << (2 * mod_depth));
+      phase2 += (omega >> 1) + (omega >> 2) * (1 << mod_depth) + diff;
+      phase3 += (omega >> 2) - (diff * 3) + (diff >> 2);
       phase4 += (omega >> 3) + (diff * 4) + (diff >> 3);
-      phase5 += (omega >> 2); // + (diff * 2) + (diff >> 2);
+      phase5 += (omega >> 2);  // + (diff * 2) + (diff >> 2);
     }
 
     SetAudio1(sinval(phase1 >> 11) >> 3);
@@ -165,18 +187,14 @@ public:
     SetCV1(sinval(phase3 >> 11) >> 3);
     SetCV2(sinval(phase4 >> 11) >> 3);
 
-    bool pulse1 = (
-      ((sinval(phase1 >> 11) >> 8) & 0x0a00) > 
-      ((sinval(phase2 >> 11) >> 8) & 0x0a00)
-    );
-    bool pulse2 = (
-      ((sinval(phase3 >> 11) >> 8) & 0x0a00) > 
-      ((sinval(phase4 >> 11) >> 8) & 0x0a00)
-    );
+    bool pulse1 = (((sinval(phase1 >> 11) >> 8) & 0x0a00) > ((sinval(phase2 >> 11) >> 8) & 0x0a00));
+    bool pulse2 = (((sinval(phase3 >> 11) >> 8) & 0x0a00) > ((sinval(phase4 >> 11) >> 8) & 0x0a00));
     PulseOut1(pulse1);
     PulseOut2(pulse2);
-    LedOn(4, pulse1);
-    LedOn(5, pulse2);
+    if (!switch_is_down) {
+      LedOn(4, pulse1);
+      LedOn(5, pulse2);
+    }
     // SetCV2(mod << 8);
     // debugVal(mod, -2000, -1000, -500, 500, 1000, 2000);
   }
@@ -188,7 +206,6 @@ public:
     LedOn(3, val > t3);
     LedOn(4, val > t4);
     LedOn(5, val > t5);
-
   }
 };
 
