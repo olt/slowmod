@@ -33,19 +33,25 @@ Let's just increment a 32-bit unsigned, let it wrap
 
  */
 
-int32_t voct_vals[341] = { 314964268, 315605144, 316247323, 316890810, 317535606, 318181713, 318829136, 319477876, 320127936, 320779318, 321432026, 322086062, 322741429, 323398129, 324056166, 324715542, 325376259, 326038320, 326701729, 327366488, 328032599, 328700066, 329368890, 330039076, 330710625, 331383541, 332057826, 332733483, 333410515, 334088924, 334768714, 335449887, 336132446, 336816394, 337501733, 338188467, 338876599, 339566130, 340257065, 340949405, 341643155, 342338315, 343034891, 343732883, 344432296, 345133132, 345835394, 346539085, 347244208, 347950766, 348658761, 349368197, 350079076, 350791402, 351505177, 352220405, 352937088, 353655229, 354374831, 355095898, 355818432, 356542436, 357267913, 357994867, 358723299, 359453214, 360184614, 360917502, 361651881, 362387755, 363125126, 363863998, 364604372, 365346254, 366089644, 366834548, 367580967, 368328905, 369078365, 369829350, 370581862, 371335907, 372091485, 372848601, 373607257, 374367457, 375129204, 375892500, 376657350, 377423757, 378191722, 378961250, 379732344, 380505008, 381279243, 382055053, 382832443, 383611414, 384391970, 385174114, 385957850, 386743180, 387530108, 388318638, 389108772, 389900514, 390693867, 391488834, 392285418, 393083624, 393883453, 394684911, 395487998, 396292720, 397099080, 397907080, 398716724, 399528016, 400340958, 401155555, 401971809, 402789724, 403609303, 404430550, 405253468, 406078060, 406904330, 407732282, 408561918, 409393242, 410226258, 411060969, 411897378, 412735489, 413575305, 414416830, 415260068, 416105021, 416951694, 417800089, 418650211, 419502062, 420355647, 421210969, 422068031, 422926837, 423787390, 424649694, 425513753, 426379570, 427247149, 428116493, 428987606, 429860492, 430735153, 431611595, 432489820, 433369831, 434251634, 435135230, 436020625, 436907821, 437796822, 438687632, 439580255, 440474694, 441370953, 442269035, 443168945, 444070686, 444974262, 445879677, 446786934, 447696036, 448606989, 449519795, 450434459, 451350984, 452269373, 453189631, 454111762, 455035769, 455961656, 456889428, 457819087, 458750637, 459684083, 460619429, 461556677, 462495833, 463436900, 464379881, 465324781, 466271604, 467220353, 468171033, 469123648, 470078200, 471034695, 471993136, 472953528, 473915873, 474880177, 475846443, 476814674, 477784876, 478757053, 479731207, 480707343, 481685466, 482665579, 483647686, 484631791, 485617899, 486606014, 487596139, 488588278, 489582437, 490578618, 491576826, 492577066, 493579340, 494583654, 495590012, 496598417, 497608874, 498621387, 499635961, 500652599, 501671305, 502692084, 503714940, 504739878, 505766901, 506796014, 507827220, 508860525, 509895933, 510933447, 511973073, 513014813, 514058674, 515104658, 516152771, 517203017, 518255399, 519309923, 520366592, 521425412, 522486386, 523549519, 524614815, 525682278, 526751914, 527823726, 528897719, 529973898, 531052266, 532132828, 533215589, 534300553, 535387725, 536477109, 537568709, 538662531, 539758579, 540856856, 541957368, 543060120, 544165115, 545272359, 546381856, 547493610, 548607627, 549723910, 550842464, 551963295, 553086406, 554211802, 555339489, 556469470, 557601750, 558736334, 559873227, 561012433, 562153957, 563297803, 564443977, 565592484, 566743327, 567896512, 569052043, 570209926, 571370165, 572532764, 573697729, 574865065, 576034775, 577206866, 578381342, 579558207, 580737467, 581919127, 583103191, 584289664, 585478552, 586669858, 587863589, 589059748, 590258342, 591459374, 592662850, 593868775, 595077154, 596287991, 597501292, 598717062, 599935306, 601156029, 602379235, 603604930, 604833120, 606063808, 607297001, 608532703, 609770919, 611011654, 612254915, 613500705, 614749029, 615999894, 617253304, 618509265, 619767781, 621028858, 622292501, 623558715, 624827505, 626098877, 627372836, 628649388 };
 
-// Takes integers 0-4095 from CV in
-// Returns exponential values corresponding to volts per octave
-// Max frequency about 20kHz, should aim for 2^30 ~ 1 billion, so want max number about 500 million
-// About 455 values per octave
-// Starts with  314964268 because this  314964268/2^32 * 48kHz = (3512Hz) 3 octaves above A440
-int32_t ExpVoct(int32_t in) {
-  if (in > 4091) in = 4091;  // limit to 12 oct;
-  int32_t oct = in / 341;
-  int32_t suboct = in % 341;
+// 256 values + 1 for interpolation
+int32_t knob_vals[257] = {
+  12, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 30, 31, 33, 35, 36, 38, 40, 42, 44, 46, 48, 50, 53, 55, 57, 60, 62, 65, 68, 70, 73, 76, 79, 82, 85, 88, 91, 94, 97, 101, 104, 107, 111, 114, 118, 122, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 166, 170, 175, 179, 184, 188, 193, 198, 202, 193, 195, 197, 199, 201, 203, 205, 208, 210, 213, 215, 218, 221, 224, 227, 230, 234, 237, 241, 245, 248, 252, 256, 261, 265, 270, 274, 279, 284, 289, 295, 300, 306, 312, 318, 324, 330, 337, 343, 350, 358, 365, 372, 380, 388, 396, 405, 414, 422, 432, 441, 451, 460, 471, 481, 492, 503, 514, 525, 537, 549, 562, 574, 587, 600, 614, 628, 642, 657, 672, 687, 702, 718, 735, 751, 768, 786, 803, 822, 840, 859, 878, 898, 918, 939, 960, 981, 1003, 1025, 1048, 1071, 1095, 1119, 1144, 1169, 1195, 1221, 1247, 1275, 1302, 1330, 1359, 1388, 1418, 1448, 1479, 1511, 1543, 1575, 1608, 1642, 1677, 1712, 1747, 1783, 1820, 1858, 1896, 1935, 1974, 2014, 2055, 2097, 2139, 2182, 2225, 2270, 2315, 3580, 3786, 4008, 4246, 4502, 4777, 5071, 5387, 5726, 6089, 6478, 6895, 7341, 7819, 8330, 8877, 9461, 10087, 10755, 11469, 12231, 13046, 13915, 14843, 15833, 16889, 18014, 19215, 20494, 21857, 23308, 24854, 26500, 28252, 30115, 32098, 34206, 36448, 38831, 41363, 44053, 46910, 49944, 53165, 56584, 60212, 64061, 68142, 72471, 77059, 81922, 81922
+};
 
-  return voct_vals[suboct] >> (12 - oct);
+// Takes 0-4095 from CV returns
+int32_t KnobToHzQ12(int32_t in) {
+  int32_t r = in & 0x0f;  // lower 4-bit
+  in >>= 4;               // x now 8-bit number, 0-255
+  int32_t s1 = knob_vals[in];
+  int32_t s2 = knob_vals[in + 1];
+  return (s2 * r + s1 * (16 - r)) >> 4;
+}
+
+uint32_t __not_in_flash_func(rnd)() {
+  static uint32_t lcg_seed = 1;
+  lcg_seed = 1664525 * lcg_seed + 1013904223;
+  return lcg_seed;
 }
 
 #include <cmath>
@@ -55,6 +61,7 @@ public:
   int32_t sinevals[npts];
 
 
+  bool led_show_phase = true;
   bool switch_is_down = false;
   int mod_depth = 0;
 
@@ -66,8 +73,21 @@ public:
     phase3 = (2 << 30) + (2 << 29);
     phase4 = 2 << 30;
     phase5 = 0;
+    phase6 = 2 << 29;
   }
-  uint32_t phase1, phase2, phase3, phase4, phase5;
+
+  void rndPhase() {
+    // start LFOs at different phases
+    phase1 = rnd();
+    phase2 = rnd();
+    phase3 = rnd();
+    phase4 = rnd();
+    phase5 = rnd();
+    phase6 = rnd();
+  }
+  
+  uint32_t phase1, phase2, phase3, phase4, phase5, phase6;
+  int32_t val1, val2, val3, val4, val5, val6;
   SlowMod() {
     for (int i = 0; i < npts; i++) {
       // just shy of 2^22 * sin
@@ -76,14 +96,16 @@ public:
 
     reset();
   }
-  // Given 21-bit index x, return 2^22 * sin(y) where y = x/2^21
-  int32_t sinval(int32_t x) {
+  // Return sin given 32 bit index x, return 2^19 * sin(y)
+  int32_t sinval(uint32_t x) {
+    // shift from 32 bit to 13+8
+    x >>= 11;
     x &= 0x001FFFFF;       // wrap at 21 bits = 13+8 bits
     int32_t r = x & 0xFF;  //
     x >>= 8;               // x now 13-bit number, 0-8191
     int32_t s1 = sinevals[x];
     int32_t s2 = sinevals[(x + 1) & 0x1FFF];
-    return (s2 * r + s1 * (256 - r)) >> 8;
+    return (s2 * r + s1 * (256 - r)) >> 8 >> 3;
   }
 
   void SetAudio1(int32_t cv_val) {
@@ -92,7 +114,7 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
-    if (!switch_is_down) {
+    if (led_show_phase) {
       LedBrightness(0, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
     }
     if (Connected(Input::Audio1)) {
@@ -107,7 +129,7 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = int32_t(truncated_cv_val >> 8) - 2048;
-    if (!switch_is_down) {
+    if (led_show_phase) {
       LedBrightness(1, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
     }
     if (Connected(Input::Audio2)) {
@@ -122,7 +144,7 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = 2048 - int32_t(truncated_cv_val >> 8);
-    if (!switch_is_down) {
+    if (led_show_phase) {
       LedBrightness(2, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
     }
     if (Connected(Input::CV1)) {
@@ -137,7 +159,7 @@ public:
     uint32_t truncated_cv_val = (cv_val - error) & 0xFFFFFF00;
     error += truncated_cv_val - cv_val;
     int16_t val = 2048 - int32_t(truncated_cv_val >> 8);
-    if (!switch_is_down) {
+    if (led_show_phase) {
       LedBrightness(3, 4095 - (int32_t(truncated_cv_val >> 8) * int32_t(truncated_cv_val >> 8)) / 4096);
     }
     if (Connected(Input::CV2)) {
@@ -147,6 +169,7 @@ public:
     }
   }
   virtual void __not_in_flash_func(ProcessSample)() {
+    uint64_t start = rp2040.getCycleCount64();
     bool pause = false;
     if (SwitchVal() == Switch::Up) {
       pause = true;
@@ -154,52 +177,97 @@ public:
 
     if (SwitchVal() == Switch::Down) {
       if (!switch_is_down) {
-        mod_depth = (mod_depth + 1) % 4;
+        rndPhase();
       }
       switch_is_down = true;
-      for (int i = 0; i < 6; i++) {
-        LedOn(i, i <= mod_depth);
-      }
     } else {
       switch_is_down = false;
     }
 
-    int32_t mod = ((sinval(phase5 >> 11) >> 3) >> 8);  // 0-4095
-    mod += ((sinval(phase2 >> 11) >> 3) >> 10);        // + 0-1023
-    mod += ((sinval(phase1 >> 11) >> 3) >> 12);        // + 0-255
-    mod = mod >> (5 - mod_depth);                      // 0-5373 shifted by 1-5 -> max. 2686-167
+    // int32_t mod = (val3 >> 8);  // 0-4095
+    // mod += (val2 >> 10);        // + 0-1023
+    // mod += (val1 >> 12);        // + 0-255
+    // mod = (mod - 5373 / 2) >> (4 - mod_depth);   // 0-5373 shifted by 1-4 -> max. 2686-335
 
-    int32_t omega = ExpVoct(KnobVal(Knob::Main) + mod) >> 11;
+    // int32_t omega = ExpVoct(KnobVal(Knob::Main) + mod) >> 11;
 
-    int32_t diff = 12 + (7 << (mod_depth + 1));
+    // int32_t diff = 12 + (7 << (mod_depth + 1));
     // if (diff > omega) { diff = omega; }
 
+
+    // >> 8  -> +-2048
+    // >> 9  -> +-1024
+    // >> 10 -> +-512
+    // >> 11 -> +-256
+
+    int32_t mod1 = 200 + (abs(val3 >> 9)) + abs((val4 >> 9));  // + abs(val5 >> 10);
+    int32_t mod2 = 0 + (abs(val3 >> 11)) + (val4 >> 10);       //  - abs(val5 >> 10);
+    int32_t mod3 = -200 + (val4 >> 11) + (val1 >> 11);         // + abs(val5 >> 10);
+    int32_t mod4 = -517 + (val1 >> 11) + (val3 >> 11);         // - abs(val5 >> 10);
+    int32_t mod5 = 0;
+
     if (!pause) {
-      phase1 += omega * (1 << (2 * mod_depth));
-      phase2 += (omega >> 1) + (omega >> 2) * (1 << mod_depth) + diff;
-      phase3 += (omega >> 2) - (diff * 3) + (diff >> 2);
-      phase4 += (omega >> 3) + (diff * 4) + (diff >> 3);
-      phase5 += (omega >> 2);  // + (diff * 2) + (diff >> 2);
+      // uint32_t hz1 = (KnobToHzQ12(KnobVal(Knob::Main)) * 4 * abs(val5 >> 8)) << 11;
+      uint32_t hz1 = (KnobToHzQ12(KnobVal(Knob::Main)) * (2 + 4 * abs(val5 >> 8))) >> 11;
+      phase1 += phaseStep(hz1);
+      uint32_t hz2 = (KnobToHzQ12(KnobVal(Knob::Main)) * (1 + 3 * abs(val5 >> 8))) >> 11;
+      phase2 += phaseStep(hz2);
+      uint32_t hz3 = KnobToHzQ12(KnobVal(Knob::Main));
+      phase3 += phaseStep(hz3);
+      uint32_t hz4 = KnobToHzQ12(KnobVal(Knob::Main)) >> 1;
+      phase4 += phaseStep(hz4);
+
+      uint32_t hz5 = KnobToHzQ12(KnobVal(Knob::Main)) >> 2;
+      phase5 += phaseStep(hz5);
     }
+    // if (!pause) {
+    //   phase1 += omega * (1 << (2 * mod_depth));
+    //   phase2 += (omega >> 1) + (omega >> 2) * (1 << mod_depth) + diff;
+    //   phase3 += (omega >> 2) - (diff * 3) + (diff >> 2);
+    //   phase4 += (omega >> 3) + (diff * 4) + (diff >> 3);
+    //   phase5 += (omega >> 2);  // + (diff * 2) + (diff >> 2);
+    // }
 
-    SetAudio1(sinval(phase1 >> 11) >> 3);
-    SetAudio2(sinval(phase2 >> 11) >> 3);
-    SetCV1(sinval(phase3 >> 11) >> 3);
-    SetCV2(sinval(phase4 >> 11) >> 3);
+    val1 = sinval(phase1);
+    val2 = sinval(phase2);
+    val3 = sinval(phase3);
+    val4 = sinval(phase4);
+    val5 = sinval(phase5);
+    val6 = sinval(phase6);
 
-    bool pulse1 = (((sinval(phase1 >> 11) >> 8) & 0x0a00) > ((sinval(phase2 >> 11) >> 8) & 0x0a00));
-    bool pulse2 = (((sinval(phase3 >> 11) >> 8) & 0x0a00) > ((sinval(phase4 >> 11) >> 8) & 0x0a00));
+
+    SetAudio1(val1);
+    SetAudio2(val2);
+    SetCV1(val3);
+    SetCV2(val4);
+
+    bool pulse1 = (((val1 >> 8) & 0x0100) > ((val2 >> 8) & 0x0100));
+    bool pulse2 = (((val3 >> 8) & 0x0100) > ((val4 >> 8) & 0x0100));
     PulseOut1(pulse1);
     PulseOut2(pulse2);
-    if (!switch_is_down) {
+    if (led_show_phase) {
       LedOn(4, pulse1);
       LedOn(5, pulse2);
     }
     // SetCV2(mod << 8);
     // debugVal(mod, -2000, -1000, -500, 500, 1000, 2000);
+
+    // uncomment led_show_phase=true in switch down logic above
+    led_show_phase = false;
+    //debugVal(val5>>8, -2000, -1000, -500, 500, 1000, 2000);
+    debugVal(rp2040.getCycleCount64() - start, 500, 1000, 1250, 1500, 1750, 2000);
   }
 
-  void debugVal(int32_t val, int32_t t0, int32_t t1, int32_t t2, int32_t t3, int32_t t4, int32_t t5) {
+  uint32_t phaseStep(uint32_t hzQ12) {
+    // 1/48000hz -> 0xffffffff
+    // Steps for full phase = 0xffffffff = (1<<32)-1 = 4.294.967.296
+    // (2<<32)-1 / 48000hz = steps for each sample @1hz
+    const uint32_t phase_step_per_sample = 0xffffffff / 48000;
+
+    return (phase_step_per_sample * hzQ12) >> 12;
+  }
+
+  void debugVal(int64_t val, int32_t t0, int32_t t1, int32_t t2, int32_t t3, int32_t t4, int32_t t5) {
     LedOn(0, val > t0);
     LedOn(1, val > t1);
     LedOn(2, val > t2);
