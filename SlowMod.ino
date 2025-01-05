@@ -85,7 +85,24 @@ public:
     phase5 = rnd();
     phase6 = rnd();
   }
-  
+
+  // Crossfade function
+  int32_t crossfade(int32_t a, int32_t b, uint32_t f) {
+    // Ensure f is within bounds [0, 4095]
+    if (f > 4095) {
+      f = 4095;
+    }
+
+    // Calculate the crossfade using fixed-point arithmetic
+    int64_t diff = (int64_t)(b - a);  // Difference between values (prevent overflow)
+    int64_t crossfade_val = (int64_t)a * (4095) + diff * f;
+
+    // Divide by 4095 to normalize
+    int32_t result = (int32_t)(crossfade_val >> 12);
+
+    return result;  // Return the blended value
+  }
+
   uint32_t phase1, phase2, phase3, phase4, phase5, phase6;
   int32_t val1, val2, val3, val4, val5, val6;
   SlowMod() {
@@ -235,11 +252,10 @@ public:
     val5 = sinval(phase5);
     val6 = sinval(phase6);
 
-
-    SetAudio1(val1);
-    SetAudio2(val2);
-    SetCV1(val3);
-    SetCV2(val4);
+    SetAudio1(crossfade(val1, -val2, KnobVal(Knob::Y)));
+    SetAudio2(crossfade(val2, -val1, KnobVal(Knob::Y)));
+    SetCV1(crossfade(val3, -val4, KnobVal(Knob::Y)));
+    SetCV2(crossfade(val4, -val3, KnobVal(Knob::Y)));
 
     bool pulse1 = (((val1 >> 8) & 0x0100) > ((val2 >> 8) & 0x0100));
     bool pulse2 = (((val3 >> 8) & 0x0100) > ((val4 >> 8) & 0x0100));
