@@ -1,37 +1,17 @@
 #include "ComputerCard.h"
 
-/// Dual sample and hold
+/// SlowMod
 
-/// Updates audio output to take the value of the audio input
-/// only when the corresponding pulse input has a rising edge.
+/// Four LFOs controled by the main knob. Audio1 is the fastes,
+/// CV2 the slowest. 
 
-/// If audio input not connected, sample random noise instead.
+/// Use inputs as VCAs for the corresponding outputs.
 
-/// If pulse input not connected, update output every sample,
-/// (tracking audio input if connected, or producing white noise
-/// if audio input not connected.)
+/// Knob X controls the intensity of cross modulation between the LFOs.
+/// Knob Y crossfades Audio1 and 2, and CV1 and 2.
 
-// Slow LFO
-
-/*
-looking for
-sin(omega1 t)
-and 
-sin(omega2 t)
-
-such that at t=T, second sine has done one more phase than first.
-
-That is,
-
-omega1 T + 2pi = omega2 T
-omega2 = omega1 + 2pi/T
-
-Now, index here is 21-bit ~= 2 million
-Sample rate 48kHz
-So incrementing one per sample gives 2^21/48000Hz = 44s loop
-Let's just increment a 32-bit unsigned, let it wrap
-
- */
+/// Pulse 1 and switch up pauses all LFOs.
+/// Pulse 2 and switch down randomizes the phase of all LFOs.
 
 
 // 256 values + 1 for interpolation
@@ -39,7 +19,7 @@ int32_t knob_vals[257] = {
   12, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27, 28, 30, 31, 33, 35, 36, 38, 40, 42, 44, 46, 48, 50, 53, 55, 57, 60, 62, 65, 68, 70, 73, 76, 79, 82, 85, 88, 91, 94, 97, 101, 104, 107, 111, 114, 118, 122, 125, 129, 133, 137, 141, 145, 149, 153, 157, 161, 166, 170, 175, 179, 184, 188, 193, 198, 202, 193, 195, 197, 199, 201, 203, 205, 208, 210, 213, 215, 218, 221, 224, 227, 230, 234, 237, 241, 245, 248, 252, 256, 261, 265, 270, 274, 279, 284, 289, 295, 300, 306, 312, 318, 324, 330, 337, 343, 350, 358, 365, 372, 380, 388, 396, 405, 414, 422, 432, 441, 451, 460, 471, 481, 492, 503, 514, 525, 537, 549, 562, 574, 587, 600, 614, 628, 642, 657, 672, 687, 702, 718, 735, 751, 768, 786, 803, 822, 840, 859, 878, 898, 918, 939, 960, 981, 1003, 1025, 1048, 1071, 1095, 1119, 1144, 1169, 1195, 1221, 1247, 1275, 1302, 1330, 1359, 1388, 1418, 1448, 1479, 1511, 1543, 1575, 1608, 1642, 1677, 1712, 1747, 1783, 1820, 1858, 1896, 1935, 1974, 2014, 2055, 2097, 2139, 2182, 2225, 2270, 2315, 3580, 3786, 4008, 4246, 4502, 4777, 5071, 5387, 5726, 6089, 6478, 6895, 7341, 7819, 8330, 8877, 9461, 10087, 10755, 11469, 12231, 13046, 13915, 14843, 15833, 16889, 18014, 19215, 20494, 21857, 23308, 24854, 26500, 28252, 30115, 32098, 34206, 36448, 38831, 41363, 44053, 46910, 49944, 53165, 56584, 60212, 64061, 68142, 72471, 77059, 81922, 81922
 };
 
-// Takes 0-4095 from CV returns
+// Takes 0-4095 from CV returns target frequency as Hz (Q12)
 int32_t KnobToHzQ12(int32_t in) {
   int32_t r = in & 0x0f;  // lower 4-bit
   in >>= 4;               // x now 8-bit number, 0-255
@@ -54,30 +34,15 @@ uint32_t __not_in_flash_func(rnd)() {
   return lcg_seed;
 }
 
-#include <cmath>
 class SlowMod : public ComputerCard {
-public:
   static constexpr int npts = 8192;
   int32_t sinevals[npts];
 
-
   bool led_show_phase = true;
   bool switch_is_down = false;
-  int mod_depth = 0;
 
-
-  void reset() {
-    // start LFOs at different phases
-    phase1 = 0;
-    phase2 = 2 << 29;
-    phase3 = (2 << 30) + (2 << 29);
-    phase4 = 2 << 30;
-    phase5 = 0;
-    phase6 = 2 << 29;
-  }
-
+  // randomize phases
   void rndPhase() {
-    // start LFOs at different phases
     phase1 = rnd();
     phase2 = rnd();
     phase3 = rnd();
@@ -86,32 +51,29 @@ public:
     phase6 = rnd();
   }
 
-  // Crossfade function
+  // Crossfade between a and b by f from 0 to 4095.
   int32_t crossfade(int32_t a, int32_t b, uint32_t f) {
-    // Ensure f is within bounds [0, 4095]
     if (f > 4095) {
       f = 4095;
     }
 
-    // Calculate the crossfade using fixed-point arithmetic
-    int64_t diff = (int64_t)(b - a);  // Difference between values (prevent overflow)
+    int64_t diff = (int64_t)(b - a);
     int64_t crossfade_val = (int64_t)a * (4095) + diff * f;
 
-    // Divide by 4095 to normalize
-    int32_t result = (int32_t)(crossfade_val >> 12);
-
-    return result;  // Return the blended value
+    return (int32_t)(crossfade_val >> 12);
   }
 
   uint32_t phase1, phase2, phase3, phase4, phase5, phase6;
   int32_t val1, val2, val3, val4, val5, val6;
+
+public:
   SlowMod() {
     for (int i = 0; i < npts; i++) {
       // just shy of 2^22 * sin
       sinevals[i] = 2048 * 2040 * sin(2 * i * M_PI / double(npts));
     }
 
-    reset();
+    rndPhase();
   }
   // Return sin given 32 bit index x, return 2^19 * sin(y)
   int32_t sinval(uint32_t x) {
@@ -188,7 +150,8 @@ public:
   virtual void __not_in_flash_func(ProcessSample)() {
     uint64_t start = rp2040.getCycleCount64();
     bool pause = false;
-    if (SwitchVal() == Switch::Up) {
+
+    if (SwitchVal() == Switch::Up || PulseIn1()) {
       pause = true;
     }
 
@@ -201,49 +164,34 @@ public:
       switch_is_down = false;
     }
 
-    // int32_t mod = (val3 >> 8);  // 0-4095
-    // mod += (val2 >> 10);        // + 0-1023
-    // mod += (val1 >> 12);        // + 0-255
-    // mod = (mod - 5373 / 2) >> (4 - mod_depth);   // 0-5373 shifted by 1-4 -> max. 2686-335
+    if (PulseIn2RisingEdge()) {
+      rndPhase();
+    }
 
-    // int32_t omega = ExpVoct(KnobVal(Knob::Main) + mod) >> 11;
-
-    // int32_t diff = 12 + (7 << (mod_depth + 1));
-    // if (diff > omega) { diff = omega; }
-
-
-    // >> 8  -> +-2048
-    // >> 9  -> +-1024
-    // >> 10 -> +-512
-    // >> 11 -> +-256
-
-    int32_t mod1 = 200 + (abs(val3 >> 9)) + abs((val4 >> 9));  // + abs(val5 >> 10);
-    int32_t mod2 = 0 + (abs(val3 >> 11)) + (val4 >> 10);       //  - abs(val5 >> 10);
-    int32_t mod3 = -200 + (val4 >> 11) + (val1 >> 11);         // + abs(val5 >> 10);
-    int32_t mod4 = -517 + (val1 >> 11) + (val3 >> 11);         // - abs(val5 >> 10);
-    int32_t mod5 = 0;
+    // modValX is a unipolar version of valX scaled by modDepth. The result is 0-4095.
+    int32_t modDepth = KnobVal(Knob::X);
+    uint32_t modVal1 = (modDepth * (2047 - (val1 >> 8))) >> 12;
+    uint32_t modVal2 = (modDepth * (2047 - (val2 >> 8))) >> 12;
+    uint32_t modVal3 = (modDepth * (2047 - (val3 >> 8))) >> 12;
+    uint32_t modVal4 = (modDepth * (2047 - (val4 >> 8))) >> 12;
+    uint32_t modVal5 = (modDepth * (2047 - (val5 >> 8))) >> 12;
+    uint32_t modVal6 = (modDepth * (2047 - (val6 >> 8))) >> 12;
 
     if (!pause) {
-      // uint32_t hz1 = (KnobToHzQ12(KnobVal(Knob::Main)) * 4 * abs(val5 >> 8)) << 11;
-      uint32_t hz1 = (KnobToHzQ12(KnobVal(Knob::Main)) * (2 + 4 * abs(val5 >> 8))) >> 11;
+      // Calculate frequencies for audio, CV and mod LFO. Cross modulate frequency by one or more
+      uint32_t hz1 = (KnobToHzQ12(KnobVal(Knob::Main)) * ((2 << 12) + ((50 * modVal5 * modVal5) >> 12) + 2 * modVal2)) >> 12;
       phase1 += phaseStep(hz1);
-      uint32_t hz2 = (KnobToHzQ12(KnobVal(Knob::Main)) * (1 + 3 * abs(val5 >> 8))) >> 11;
+      uint32_t hz2 = (KnobToHzQ12(KnobVal(Knob::Main)) * ((1 << 12) + 3 * modVal6 + 2 * modVal1)) >> 12;
       phase2 += phaseStep(hz2);
-      uint32_t hz3 = KnobToHzQ12(KnobVal(Knob::Main));
+      uint32_t hz3 = (KnobToHzQ12(KnobVal(Knob::Main)) * ((1 << 12) + modVal5 + modVal6 + modVal4)) >> 12;
       phase3 += phaseStep(hz3);
-      uint32_t hz4 = KnobToHzQ12(KnobVal(Knob::Main)) >> 1;
+      uint32_t hz4 = ((KnobToHzQ12(KnobVal(Knob::Main)) >> 1) * ((1 << 12) + 2 * modVal6 + modVal3)) >> 12;
       phase4 += phaseStep(hz4);
-
-      uint32_t hz5 = KnobToHzQ12(KnobVal(Knob::Main)) >> 2;
+      uint32_t hz5 = ((KnobToHzQ12(KnobVal(Knob::Main)) >> 2) * ((1 << 12) + (modVal6 >> 2))) >> 12;
       phase5 += phaseStep(hz5);
+      uint32_t hz6 = ((KnobToHzQ12(KnobVal(Knob::Main)) >> 3) * ((1 << 12) + (modVal5 >> 2))) >> 12;
+      phase6 += phaseStep(hz6);
     }
-    // if (!pause) {
-    //   phase1 += omega * (1 << (2 * mod_depth));
-    //   phase2 += (omega >> 1) + (omega >> 2) * (1 << mod_depth) + diff;
-    //   phase3 += (omega >> 2) - (diff * 3) + (diff >> 2);
-    //   phase4 += (omega >> 3) + (diff * 4) + (diff >> 3);
-    //   phase5 += (omega >> 2);  // + (diff * 2) + (diff >> 2);
-    // }
 
     val1 = sinval(phase1);
     val2 = sinval(phase2);
@@ -265,22 +213,17 @@ public:
       LedOn(4, pulse1);
       LedOn(5, pulse2);
     }
-    // SetCV2(mod << 8);
-    // debugVal(mod, -2000, -1000, -500, 500, 1000, 2000);
 
-    // uncomment led_show_phase=true in switch down logic above
-    led_show_phase = false;
-    //debugVal(val5>>8, -2000, -1000, -500, 500, 1000, 2000);
-    debugVal(rp2040.getCycleCount64() - start, 500, 1000, 1250, 1500, 1750, 2000);
+    // led_show_phase = false;
+    // debugVal(abs(val4 >> 9), -2000, -1000, -500, 500, 1000, 2000);
+    // debugVal(rp2040.getCycleCount64() - start, 500, 1000, 1250, 1500, 1750, 2000);
   }
 
   uint32_t phaseStep(uint32_t hzQ12) {
-    // 1/48000hz -> 0xffffffff
     // Steps for full phase = 0xffffffff = (1<<32)-1 = 4.294.967.296
     // (2<<32)-1 / 48000hz = steps for each sample @1hz
-    const uint32_t phase_step_per_sample = 0xffffffff / 48000;
-
-    return (phase_step_per_sample * hzQ12) >> 12;
+    const uint32_t phase_steps_per_sample = 0xffffffff / 48000;
+    return (phase_steps_per_sample * hzQ12) >> 12;
   }
 
   void debugVal(int64_t val, int32_t t0, int32_t t1, int32_t t2, int32_t t3, int32_t t4, int32_t t5) {
@@ -297,8 +240,8 @@ SlowMod sm;
 
 void setup() {
   sm.EnableNormalisationProbe();
-  sm.Run();
 }
 
 void loop() {
+  sm.Run();
 }
